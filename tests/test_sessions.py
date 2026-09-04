@@ -18,6 +18,14 @@ def test_admission_expires_closed_to_stream_start():
         mgr.start_stream(s, now=17)
 
 
+def test_near_expired_auth_session_cannot_begin_external_admission():
+    mgr = SessionManager(100, 30)
+    s = mgr.create(now=10)
+    with pytest.raises(PermissionError, match="near expiry"):
+        mgr.admit(s, True, now=81)
+    assert s.state == State.AUTHENTICATED
+
+
 def test_valid_lifecycle_and_viewer_heartbeat():
     mgr = SessionManager(900, 300)
     s = mgr.create(now=10)
@@ -40,8 +48,6 @@ def test_expired_stream_remains_reapable_until_external_revoke():
     mgr.admit(s, True, now=11)
     mgr.start_stream(s, now=12)
     assert mgr.get(s.token, now=21) is None
-    # The HTTP auth path treats it as expired, but the watchdog can still see it
-    # and revoke its external capability before deleting session state.
     assert mgr.streaming() == [s]
     mgr.close(s)
     assert mgr.streaming() == []
