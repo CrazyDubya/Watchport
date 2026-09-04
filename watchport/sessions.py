@@ -65,10 +65,15 @@ class SessionManager:
     def admit(self, session: Session, indicator_healthy: bool, now: float | None = None) -> Session:
         now = time.time() if now is None else now
         with self._lock:
-            if not indicator_healthy or session.state != State.AUTHENTICATED or now >= session.expires_at:
-                raise PermissionError("stream admission denied")
+            remaining = session.expires_at - now
+            if (
+                not indicator_healthy
+                or session.state != State.AUTHENTICATED
+                or remaining < self.admission_ttl_seconds
+            ):
+                raise PermissionError("stream admission denied; reauthenticate if the session is near expiry")
             session.state = State.ADMITTED
-            session.admitted_until = min(session.expires_at, now + self.admission_ttl_seconds)
+            session.admitted_until = now + self.admission_ttl_seconds
             return session
 
     def start_stream(self, session: Session, now: float | None = None) -> Session:
