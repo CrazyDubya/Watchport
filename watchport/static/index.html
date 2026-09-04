@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="color-scheme" content="dark light">
   <title>Watchport</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
@@ -12,14 +13,31 @@
     <section id="auth" class="card">
       <p class="eyebrow">PRIVATE DESKTOP VIEW</p>
       <h1>Your desktop, through a one-way window.</h1>
-      <p>Passkey authentication is required in addition to Tailnet access.</p>
+      <p>Tailnet access is only the perimeter. A passkey is separately required to view.</p>
+      <div id="bootstrap" hidden>
+        <label for="bootstrapToken">First-passkey bootstrap token</label>
+        <input id="bootstrapToken" autocomplete="one-time-code" spellcheck="false" inputmode="text">
+        <p class="hint">Get this once from <code>watchport-bootstrap</code> on the host.</p>
+      </div>
       <button id="authButton">Use passkey</button>
-      <button id="registerButton" class="secondary" hidden>Enroll passkey on this host</button>
-      <p id="message"></p>
+      <button id="registerButton" class="secondary" hidden>Enroll first passkey</button>
+      <p id="message" role="status"></p>
     </section>
     <section id="viewer" hidden>
-      <div class="toolbar"><span id="live">READY</span><button id="startButton">Open desktop</button><button id="stopButton" class="secondary" hidden>Close view</button></div>
-      <iframe id="stream" title="View-only desktop stream" allow="autoplay; fullscreen" referrerpolicy="no-referrer"></iframe>
+      <div class="toolbar">
+        <span id="live">READY</span>
+        <span id="streamHealth"></span>
+        <button id="startButton">Open desktop</button>
+        <button id="stopButton" class="secondary" hidden>Close view</button>
+        <button id="logoutButton" class="ghost">Lock</button>
+      </div>
+      <iframe
+        id="stream"
+        title="View-only desktop stream"
+        allow="autoplay; fullscreen"
+        sandbox="allow-scripts allow-same-origin allow-presentation"
+        referrerpolicy="no-referrer"
+        src="about:blank"></iframe>
     </section>
   </main>
   <script src="/static/app.js" defer></script>
