@@ -104,8 +104,12 @@ class Settings:
                 "Watchport gateway must bind to loopback; publish it with Tailscale Serve rather than a public/listen-all address"
             )
 
-        app_id_raw = os.getenv("WATCHPORT_MOONLIGHT_APP_ID", "-1")
-        app_id = int(app_id_raw)
+        app_id = int(os.getenv("WATCHPORT_MOONLIGHT_APP_ID", "-1"))
+        moonlight_ttl = int(os.getenv("WATCHPORT_MOONLIGHT_TTL", "3600"))
+        if moonlight_ttl not in {3600, 14400, 28800, 86400, 172800}:
+            raise RuntimeError(
+                "WATCHPORT_MOONLIGHT_TTL must be 3600, 14400, 28800, 86400, or 172800 seconds; unlimited is intentionally forbidden"
+            )
 
         return cls(
             host=host,
@@ -124,6 +128,6 @@ class Settings:
             moonlight_slots=_slots(os.getenv("WATCHPORT_MOONLIGHT_SLOTS", "2,3,4")),
             moonlight_host_uuid=os.getenv("WATCHPORT_MOONLIGHT_HOST_UUID", "").strip(),
             moonlight_app_id=app_id,
-            moonlight_ttl_seconds=_int("WATCHPORT_MOONLIGHT_TTL", 3600, minimum=3600),
+            moonlight_ttl_seconds=moonlight_ttl,
             moonlight_verify_tls=_bool("WATCHPORT_MOONLIGHT_VERIFY_TLS", False),
         )
