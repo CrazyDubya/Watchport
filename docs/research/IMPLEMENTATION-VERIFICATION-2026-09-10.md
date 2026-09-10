@@ -4,7 +4,7 @@ Scope: original Watchport changes on `codex/mac-integration-readiness`, based on
 
 ## Passed locally
 
-- 47 Python tests on Python 3.12, including partial revocation, malformed slot state, Internet Access configuration, stale GUI revision, admission expiry after minting, orphan cleanup through host kill, private config, origin separation, cross-process control locking and acceptance gating.
+- 48 Python tests on Python 3.12, including partial revocation, malformed slot state, Internet Access configuration, stale GUI revision, admission expiry after minting, orphan cleanup through host kill, startup uncertainty without viewer records, private config, origin separation, cross-process control locking and acceptance gating.
 - 5 Node browser-lifecycle tests: late admission after background, deliberate foreground reopen, no authorization retry, manual reconnect blocked by uncertain revocation, and revocation before network retry. These use a simulated browser environment, not Safari or a video decoder.
 - Python compile, JavaScript syntax and `git diff --check`.
 - Editable package build/install as 0.3.0.dev1 without adding runtime dependencies.

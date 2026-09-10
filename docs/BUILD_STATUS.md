@@ -6,7 +6,7 @@
 
 - Passkeys with required user verification, one-use first-key bootstrap, session expiry, CSRF, secure cookies, and metadata-only audit logging.
 - Ephemeral backend Viewer grants with local PIN redemption, explicit Internet Access configuration checks, input-permission verification, and verified `slot/state=off` revocation responses.
-- Every configured slot must revoke successfully. Partial cleanup or failed admission with uncertain revocation blocks new viewing; the gateway retries cleanup.
+- Every configured slot must revoke successfully. Partial cleanup or failed admission with uncertain revocation blocks new viewing; the gateway retries cleanup. Failed startup cleanup explicitly signals a visible warning even when the restarted gateway has no viewer records.
 - The GUI acknowledges a fresh warning revision before capability release. A frozen GUI stops indicator heartbeats. Gateway and indicator independently revoke dedicated player slots and serialize owner operations across processes.
 - Phone shell with deliberate reopening after background, stale-admission rejection, revocation before reconnect, bounded foreground network retries, safe-area layout, and fullscreen fallback.
 - Private config generation/loading, Mac LaunchAgent generation/install/status/safe removal, and an acceptance recorder that refuses readiness without security evidence and latency samples.

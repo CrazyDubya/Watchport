@@ -51,6 +51,7 @@ def _poll(base: str, secret: str, settings: Settings, state: dict, stop: threadi
             state["snapshot"] = data
             state["viewers"] = int(data.get("viewers", 0))
             state["oldest"] = data.get("oldestStartedAt")
+            state["unsafe"] = bool(data.get("cleanupUncertain", False))
             state["healthy"] = True
             state["failsafe"] = False
             disconnected_since = None
@@ -87,7 +88,7 @@ def main() -> None:
     base = os.getenv("WATCHPORT_LOCAL_URL", f"http://127.0.0.1:{settings.port}").rstrip("/")
     secret = settings.indicator_secret
 
-    state = {"viewers": 0, "healthy": False, "oldest": None, "failsafe": False, "snapshot": {}}
+    state = {"viewers": 0, "healthy": False, "oldest": None, "failsafe": False, "unsafe": False, "snapshot": {}}
     stop = threading.Event()
     threading.Thread(
         target=_poll, args=(base, secret, settings, state, stop), daemon=True
@@ -117,6 +118,14 @@ def main() -> None:
                 detail.config(text=f"Active for {elapsed // 60}:{elapsed % 60:02d} · local kill available")
             else:
                 detail.config(text="Active remote viewing · local kill available")
+            kill_button.pack(pady=(9, 0))
+            root.deiconify()
+            root.attributes("-topmost", True)
+        elif state.get("unsafe"):
+            # After a gateway restart, surviving upstream authority may have no
+            # local session/count. Unknown is not idle and must remain visible.
+            label.config(text="WATCHPORT STREAM REVOCATION UNCONFIRMED")
+            detail.config(text="New viewing blocked · retry with Disconnect viewers")
             kill_button.pack(pady=(9, 0))
             root.deiconify()
             root.attributes("-topmost", True)

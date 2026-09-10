@@ -107,3 +107,23 @@ def test_host_kill_retains_warning_until_orphan_slot_is_confirmed_off(tmp_path):
     assert response.status_code == 200
     assert state['indicator'].viewer_count() == 0
     assert not state['adapter'].uncertain
+
+
+def test_startup_cleanup_failure_warns_even_without_local_viewer_records(tmp_path):
+    app, state, session = running(tmp_path)
+    transport = state['adapter'].transport
+    deactivate = transport.deactivate
+    def cannot_revoke(slot):
+        raise StreamAdapterError('upstream unavailable')
+    transport.deactivate = cannot_revoke
+    with TestClient(app, base_url='https://desktop.example.ts.net:8443', client=('127.0.0.1', 12345)) as client:
+        try:
+            response = client.post('/internal/indicator/heartbeat',
+                headers={'X-Watchport-Indicator': state['settings'].indicator_secret},
+                json={'renderedToken': None})
+            assert response.status_code == 200
+            assert response.json()['viewers'] == 0
+            assert response.json()['cleanupUncertain'] is True
+            assert post_start(client, session).status_code == 503
+        finally:
+            transport.deactivate = deactivate

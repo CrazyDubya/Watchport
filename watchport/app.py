@@ -393,7 +393,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if token is not None and not isinstance(token, str):
             raise HTTPException(400, "invalid render acknowledgement")
         indicator.heartbeat(rendered_token=token)
-        return indicator.snapshot()
+        return {**indicator.snapshot(), "cleanupUncertain": not runtime["adapterHealthy"]}
 
     @app.get("/internal/indicator/state")
     def indicator_state(request: Request):
