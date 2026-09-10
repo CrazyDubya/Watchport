@@ -4,6 +4,17 @@ Watchport is not considered deployment-ready on a host until these tests pass on
 
 Record the date, Watchport commit, Sunshine version, Moonlight-Web version, Tailscale version, host OS, client device/browser, and network path for the run.
 
+Use [MAC-AGENT-HANDOFF.md](MAC-AGENT-HANDOFF.md) and `watchport-acceptance` to record evidence. Missing, failed or blocked mandatory cases prevent readiness. The following additions are mandatory alongside the original checklist.
+
+- [ ] Player ingress rejects owner/admin endpoints and strips Watchport/owner cookies, including crafted paths and WebSockets; see [PLAYER-INGRESS.md](PLAYER-INGRESS.md).
+- [ ] The actual stream remains the intended Desktop even when an unrelated owner stream exists; an unverified override fails acceptance.
+- [ ] Stalling only the indicator GUI event loop stops heartbeats and terminates video; record elapsed time and old-cookie replay results.
+- [ ] A single failed slot revocation retains warning state and blocks admission even when other slots report success. Local Disconnect viewers covers orphaned/uncertain slots.
+- [ ] Host lock, sleep/wake, logout/login and reboot produce safe observed behavior; user LaunchAgents alone are insufficient evidence.
+- [ ] Phone Safari and home-screen layout, rotation, fullscreen fallback, duplicate tabs, extra Join taps and Wi-Fi/cellular transitions have been observed.
+- [ ] Clean install, launchd recovery, safe upgrade/uninstall and credential recovery preserve the security boundary.
+- [ ] At least five first-frame/glass-to-glass/reconnect samples per network are recorded, with actual quality, readability and direct/DERP path.
+
 ## A. Baseline
 
 - [ ] `pytest` passes from a fresh virtual environment.
@@ -134,7 +145,7 @@ This test is important because the data plane lives in Moonlight-Web. The operat
 - [ ] click **Lock** while streaming and verify the external slot is revoked before logout succeeds.
 - [ ] let the Watchport auth session expire while viewing; external slot must be revoked.
 - [ ] deliberately enable Moonlight-Web Internet Access, then attempt a new view.
-- [ ] Watchport must reject `local_only=false` and clean up the attempted activation.
+- [ ] Watchport must reject enabled Internet Access even when the link is reported `local_only=true`; new capability creation must not succeed.
 - [ ] deliberately alter the slot permission to keyboard/mouse, then attempt a new Watchport activation.
 - [ ] Watchport must restore/verify Viewer-only state or refuse admission.
 - [ ] occupy every dedicated player slot; Watchport must fail cleanly rather than borrow an owner/full-control slot.
@@ -201,7 +212,7 @@ Optional:
 Call the host ready only if:
 
 - every mandatory security/failure test passes,
-- any skipped test is explicitly justified,
+- optional skipped tests are justified; mandatory tests are not skipped,
 - there is no public ingress,
 - View-only is proven below the UI layer,
 - host indication and both revocation directions have been physically observed,

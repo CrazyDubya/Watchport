@@ -42,6 +42,9 @@ class FakeTransport:
         self.calls.append(("redeem", token, pin))
         return self.cookie
 
+    def internet_status(self):
+        return {"internet_access_enabled": False}
+
     def status(self):
         return {"slots": []}
 
@@ -131,3 +134,63 @@ def test_cleanup_reclaims_all_owned_slots():
     a.cleanup_stale_slots()
     for slot in (2, 3, 4):
         assert ("deactivate", slot) in fake.calls
+
+
+def test_partial_cleanup_preserves_unrevoked_grant_and_blocks_admission():
+    fake = FakeTransport()
+    a = adapter(fake)
+    grant = a.open('a')
+    deactivate = fake.deactivate
+    def partial(slot):
+        if slot == grant.slot:
+            raise StreamAdapterError('unreachable slot')
+        return deactivate(slot)
+    fake.deactivate = partial
+    with pytest.raises(StreamAdapterError, match='1 Watchport-owned'):
+        a.cleanup_stale_slots()
+    assert a.grant_for('a') == grant
+    assert a.uncertain
+    with pytest.raises(StreamAdapterError, match='unresolved'):
+        a.open('b')
+    fake.deactivate = deactivate
+    a.cleanup_stale_slots()
+    assert not a.uncertain
+    assert a.active_count() == 0
+
+
+def test_successful_http_response_is_not_proof_of_revocation():
+    fake = FakeTransport()
+    a = adapter(fake)
+    grant = a.open('a')
+    fake.deactivate = lambda slot: {'slot': slot, 'state': 'binded'}
+    with pytest.raises(StreamAdapterError, match='confirm'):
+        a.close('a')
+    assert a.grant_for('a') == grant
+    assert a.uncertain
+
+
+def test_failed_activation_and_failed_cleanup_block_future_admission():
+    fake = FakeTransport(local_only=False)
+    a = adapter(fake)
+    calls = 0
+    def deactivate(slot):
+        nonlocal calls
+        calls += 1
+        if calls > 1:
+            raise StreamAdapterError('cannot revoke')
+        return {'slot': slot, 'state': 'off'}
+    fake.deactivate = deactivate
+    with pytest.raises(StreamAdapterError):
+        a.open('a')
+    assert a.uncertain
+    with pytest.raises(StreamAdapterError, match='unresolved'):
+        a.open('b')
+
+
+def test_disconnected_rendezvous_does_not_override_enabled_internet_setting():
+    fake = FakeTransport(local_only=True)
+    fake.internet_status = lambda: {'internet_access_enabled': True}
+    a = adapter(fake)
+    with pytest.raises(StreamAdapterError, match='configuration check'):
+        a.open('a')
+    assert not any(c[0] == 'activate' for c in fake.calls)

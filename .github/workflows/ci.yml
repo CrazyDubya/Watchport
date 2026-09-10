@@ -40,3 +40,6 @@ jobs:
 
       - name: Test
         run: pytest
+
+      - name: Viewer lifecycle tests
+        run: node --test tests/browser/viewer.test.cjs

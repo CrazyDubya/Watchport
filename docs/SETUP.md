@@ -1,5 +1,7 @@
 # Target-system setup
 
+**Mac execution guide:** use [MAC-AGENT-HANDOFF.md](MAC-AGENT-HANDOFF.md) and [MAC-OPERATIONS.md](MAC-OPERATIONS.md). They include private config loading, a non-conflicting local port and supervision. This general guide remains background context. Complete [PLAYER-INGRESS.md](PLAYER-INGRESS.md) before exposing any Moonlight listener.
+
 This is the procedure to use when Watchport moves from pre-integration code to a real desktop. Do not skip the live acceptance checklist afterwards.
 
 ## 1. Prerequisites
@@ -20,7 +22,7 @@ Before integrating Watchport:
 
 1. Pair Moonlight-Web with Sunshine locally.
 2. Confirm ordinary local streaming works.
-3. **Disable Moonlight-Web Internet Access / rendezvous sharing.** Watchport rejects any activation that Moonlight reports as `local_only=false`.
+3. **Disable Moonlight-Web Internet Access / rendezvous sharing.** Watchport checks `internet_access_enabled=false` before activation and also requires the returned link to be local-only.
 4. Do not use Moonlight-Web player slots 2, 3, or 4 for unrelated sharing if Watchport is configured with the default slot set. Those become Watchport-owned safety capabilities.
 5. Do not grant Watchport remote-admin credentials. It uses Moonlight-Web's localhost-only rotating admin key plus an ephemeral, one-use PIN flow.
 
@@ -98,10 +100,10 @@ watchport
 
 Then privately publish it with Tailscale Serve. Current Tailscale CLI supports HTTPS serving of a local target; the exact command should be checked on the installed Tailscale version with `tailscale serve --help` before applying it.
 
-A representative configuration is:
+With `WATCHPORT_PORT=8787` (the Mac config generator default), a representative configuration is:
 
 ```bash
-tailscale serve --bg --https=8443 8443
+tailscale serve --bg --https=8443 http://127.0.0.1:8787
 ```
 
 This is **Serve**, not Funnel. Funnel is out of scope because it deliberately makes a service reachable from the public internet.
@@ -186,6 +188,8 @@ Restart Watchport and the indicator after changing configuration.
 ## 10. Publish the Moonlight player path to the tailnet only
 
 This is intentionally a live-integration step rather than a guessed static recipe. Moonlight-Web signaling and WebRTC media behavior must be observed on the actual version/platform.
+
+**Do not proxy the complete Moonlight localhost management server.** Its peer-based local trust can expose owner operations. Implement and test the boundary in [PLAYER-INGRESS.md](PLAYER-INGRESS.md).
 
 Requirements:
 

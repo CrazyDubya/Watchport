@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
+from pathlib import Path
+from .control_lock import control_lock
+
 from dataclasses import dataclass
 from http.cookiejar import CookieJar
 import json
@@ -50,7 +54,7 @@ class MoonlightTransport:
         payload = None if body is None else json.dumps(body, separators=(",", ":")).encode()
         headers = {
             "Accept": "application/json",
-            "User-Agent": "Watchport/0.2",
+            "User-Agent": "Watchport/0.3",
             "Origin": self.origin,
             **(extra_headers or {}),
         }
@@ -61,8 +65,8 @@ class MoonlightTransport:
             with self.opener.open(req, timeout=self.timeout) as response:
                 raw = response.read()
         except HTTPError as exc:
-            detail = exc.read().decode("utf-8", "replace")[:400]
-            raise StreamAdapterError(f"Moonlight-Web {method} {path} returned {exc.code}: {detail}") from exc
+            # Upstream errors can contain PINs/cookies; never echo their body.
+            raise StreamAdapterError(f"Moonlight-Web {method} {path} returned {exc.code}") from exc
         except (URLError, TimeoutError, OSError) as exc:
             raise StreamAdapterError(f"Moonlight-Web is unreachable at {self.origin}: {exc}") from exc
         if not raw:
@@ -135,6 +139,9 @@ class MoonlightTransport:
                 return cookie.value
         raise StreamAdapterError("Moonlight-Web did not issue the scoped player cookie")
 
+    def internet_status(self) -> dict:
+        return self._request("/api/internet/status")
+
     def status(self) -> dict:
         return self._request("/api/share/status")
 
@@ -167,6 +174,7 @@ class MoonlightWebAdapter:
         ttl_seconds: int = 3600,
         verify_tls: bool = False,
         transport: MoonlightTransport | None = None,
+        lock_path: Path | None = None,
     ):
         self.stream_origin = stream_origin.rstrip("/")
         self.slots = slots
@@ -175,7 +183,32 @@ class MoonlightWebAdapter:
         self.ttl_seconds = ttl_seconds
         self.transport = transport or MoonlightTransport(control_origin, verify_tls=verify_tls)
         self._grants: dict[str, StreamGrant] = {}
+        self._uncertain_slots: set[int] = set()
         self._lock = RLock()
+        self.lock_path = lock_path
+
+    @contextmanager
+    def _operation(self):
+        with self._lock:
+            try:
+                with control_lock(self.lock_path):
+                    yield
+            except TimeoutError as exc:
+                raise StreamAdapterError("Moonlight control lock timed out") from exc
+
+    def _assert_private(self) -> None:
+        if self.transport.internet_status().get("internet_access_enabled") is not False:
+            raise StreamAdapterError("Moonlight-Web Internet Access must be disabled (configuration check)")
+
+    def _deactivate_verified(self, slot: int) -> None:
+        result = self.transport.deactivate(slot)
+        if result.get("slot") != slot or result.get("state") != "off":
+            raise StreamAdapterError(f"Moonlight-Web did not confirm slot {slot} is off")
+
+    @property
+    def uncertain(self) -> bool:
+        with self._lock:
+            return bool(self._uncertain_slots)
 
     @property
     def configured(self) -> bool:
@@ -206,12 +239,15 @@ class MoonlightWebAdapter:
         if permissions.get("gamepad") is not False or permissions.get("keyboardMouse") is not False:
             raise StreamAdapterError("Moonlight-Web activation unexpectedly grants input")
         # Watchport never uses Moonlight-Web's public rendezvous/Internet Access.
-        # A false value here means someone enabled a second public ingress path.
+        # This describes the returned link, not the Internet Access setting;
+        # _assert_private separately checks that configuration before activation.
         if activation.get("local_only") is not True:
             raise StreamAdapterError("Moonlight-Web Internet Access must be disabled for Watchport")
 
     def open(self, session_id: str, now: float | None = None) -> StreamGrant:
-        with self._lock:
+        with self._operation():
+            if self._uncertain_slots:
+                raise StreamAdapterError("Viewer revocation is unresolved; admission blocked")
             existing = self._grants.get(session_id)
             if existing:
                 return existing
@@ -220,7 +256,9 @@ class MoonlightWebAdapter:
             slot = self._free_slot()
             self.transport.login_local_owner()
             try:
-                self.transport.deactivate(slot)
+                self._assert_private()
+                self._uncertain_slots.add(slot)
+                self._deactivate_verified(slot)
                 permission_state = self.transport.set_viewer_permissions(slot)
                 permissions = permission_state.get("permissions") or {}
                 if permissions.get("gamepad") is not False or permissions.get("keyboardMouse") is not False:
@@ -243,12 +281,14 @@ class MoonlightWebAdapter:
                     issued_at=issued,
                 )
                 self._grants[session_id] = grant
+                self._uncertain_slots.discard(slot)
                 return grant
             except Exception:
                 try:
-                    self.transport.deactivate(slot)
+                    self._deactivate_verified(slot)
+                    self._uncertain_slots.discard(slot)
                 except Exception:
-                    pass
+                    self._uncertain_slots.add(slot)
                 raise
             finally:
                 try:
@@ -257,13 +297,15 @@ class MoonlightWebAdapter:
                     pass
 
     def close(self, session_id: str) -> bool:
-        with self._lock:
+        with self._operation():
             grant = self._grants.get(session_id)
             if not grant:
                 return False
             self.transport.login_local_owner()
             try:
-                self.transport.deactivate(grant.slot)
+                self._uncertain_slots.add(grant.slot)
+                self._deactivate_verified(grant.slot)
+                self._uncertain_slots.discard(grant.slot)
                 self._grants.pop(session_id, None)
                 return True
             finally:
@@ -273,18 +315,20 @@ class MoonlightWebAdapter:
                     pass
 
     def cleanup_stale_slots(self) -> None:
-        with self._lock:
+        with self._operation():
+            self._uncertain_slots.update(self.slots)
             self.transport.login_local_owner()
             errors: list[Exception] = []
             try:
                 for slot in self.slots:
                     try:
-                        self.transport.deactivate(slot)
+                        self._deactivate_verified(slot)
+                        self._uncertain_slots.discard(slot)
+                        self._grants = {key: grant for key, grant in self._grants.items() if grant.slot != slot}
                     except StreamAdapterError as exc:
                         errors.append(exc)
-                if errors and len(errors) == len(self.slots):
-                    raise StreamAdapterError("could not revoke any Watchport-owned Moonlight Viewer slot")
-                self._grants.clear()
+                if errors:
+                    raise StreamAdapterError(f"could not confirm revocation of {len(errors)} Watchport-owned Viewer slot(s)")
             finally:
                 try:
                     self.transport.logout_owner()
@@ -300,25 +344,30 @@ class MoonlightWebAdapter:
                 self.close(session_id)
             except StreamAdapterError:
                 failures += 1
-        if failures:
+        if failures or self.uncertain:
             # Last-resort broad revocation is safer than preserving unrelated
             # Watchport sessions. These slots are dedicated to Watchport.
             self.cleanup_stale_slots()
 
     def probe(self) -> dict:
-        """Live-setup helper: validate auth/share API and return paired hosts."""
-        self.transport.login_local_owner()
-        try:
-            return {"share": self.transport.status(), "hosts": self.transport.hosts()}
-        finally:
-            self.transport.logout_owner()
+        """Validate local auth, private configuration and share API; list hosts."""
+        with self._operation():
+            self.transport.login_local_owner()
+            try:
+                self._assert_private()
+                return {"share": self.transport.status(), "hosts": self.transport.hosts()}
+            finally:
+                self.transport.logout_owner()
+
 
     def apps_for(self, host_uuid: str) -> dict | list:
-        self.transport.login_local_owner()
-        try:
-            return self.transport.apps(host_uuid)
-        finally:
-            self.transport.logout_owner()
+        with self._operation():
+            self.transport.login_local_owner()
+            try:
+                return self.transport.apps(host_uuid)
+            finally:
+                self.transport.logout_owner()
+
 
     def grant_for(self, session_id: str) -> StreamGrant | None:
         with self._lock:

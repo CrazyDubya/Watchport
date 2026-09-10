@@ -1,9 +1,10 @@
-# Immediate Next Actions
+# Immediate next actions
 
-1. Execute `docs/PHASE0-TESTPLAN.md` against Sunshine and at least one browser-capable Moonlight/WebRTC bridge.
-2. Record exact upstream repositories, versions, licenses, topology, and measurements under `docs/research/`.
-3. Reject any candidate where view-only can be bypassed by modifying browser code or sending a normal input protocol message.
-4. Once a substrate is selected, scaffold the smallest possible gateway implementing WebAuthn and stream admission.
-5. Build the host indicator before optimizing reconnect UX.
+Continue with [MAC-AGENT-HANDOFF.md](MAC-AGENT-HANDOFF.md) on the target Mac. The gateway, passkeys, lifecycle adapter and indicator exist; do not restart the old bootstrap plan.
 
-Do not begin remote-control features. They are outside Watchport V1.
+1. Install/pair the versioned Sunshine + Moonlight-Web stack and prove a narrow, Tailscale-only player ingress. Preserve the intended Desktop identity; do not expose localhost management via a generic proxy.
+2. Complete the real-device security matrix with evidence, including partial revocation, GUI stall, process kills, replay and host logout.
+3. Finish the Safari player interaction and measure first-frame, glass-to-glass and reconnect latency on LAN, cellular and remote Tailscale paths.
+4. Validate the prepared Mac LaunchAgents, simultaneous failure, safe upgrade/uninstall and passkey recovery. Publish sanitized results and update BUILD_STATUS.
+
+`watchport-acceptance summary` must remain incomplete until every required security case and latency sample is recorded. No remote input, public relay, OS unlock or broad tailnet policy is authorized by this plan.

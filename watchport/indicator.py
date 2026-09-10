@@ -10,11 +10,16 @@ import tkinter as tk
 
 from .config import Settings
 from .stream_adapter import MoonlightWebAdapter, StreamAdapterError
+from urllib.parse import urlparse
 
 
-def _gateway_request(base: str, secret: str, path: str, method: str = "GET") -> dict:
-    headers = {"X-Watchport-Indicator": secret}
-    req = Request(base + path, method=method, headers=headers)
+def _gateway_request(base: str, secret: str, path: str, method: str = "GET", body: dict | None = None) -> dict:
+    parsed = urlparse(base)
+    if parsed.scheme != "http" or parsed.hostname not in {"localhost", "127.0.0.1", "::1"} or parsed.username or parsed.password:
+        raise ValueError("indicator gateway URL must be HTTP loopback")
+    headers = {"X-Watchport-Indicator": secret, "Content-Type": "application/json"}
+    payload = json.dumps(body).encode() if body is not None else None
+    req = Request(base + path, method=method, headers=headers, data=payload)
     with urlopen(req, timeout=2) as response:
         return json.loads(response.read())
 
@@ -28,6 +33,7 @@ def _failsafe_adapter(settings: Settings) -> MoonlightWebAdapter:
         app_id=settings.moonlight_app_id,
         ttl_seconds=settings.moonlight_ttl_seconds,
         verify_tls=settings.moonlight_verify_tls,
+        lock_path=settings.data_dir / "moonlight-control.lock",
     )
 
 
@@ -38,7 +44,11 @@ def _poll(base: str, secret: str, settings: Settings, state: dict, stop: threadi
     while not stop.is_set():
         now = time.time()
         try:
-            data = _gateway_request(base, secret, "/internal/indicator/heartbeat", "POST")
+            rendered_token, rendered_at = state.get("rendered", (None, 0))
+            if time.monotonic() - rendered_at > 2:
+                raise RuntimeError("indicator GUI event loop is not progressing")
+            data = _gateway_request(base, secret, "/internal/indicator/heartbeat", "POST", {"renderedToken": rendered_token})
+            state["snapshot"] = data
             state["viewers"] = int(data.get("viewers", 0))
             state["oldest"] = data.get("oldestStartedAt")
             state["healthy"] = True
@@ -60,7 +70,7 @@ def _poll(base: str, secret: str, settings: Settings, state: dict, stop: threadi
                     state["failsafe"] = True
                 except StreamAdapterError:
                     state["failsafe"] = False
-        stop.wait(2)
+        stop.wait(0.25)
 
 
 def _kill(base: str, secret: str, state: dict) -> None:
@@ -77,7 +87,7 @@ def main() -> None:
     base = os.getenv("WATCHPORT_LOCAL_URL", f"http://127.0.0.1:{settings.port}").rstrip("/")
     secret = settings.indicator_secret
 
-    state = {"viewers": 0, "healthy": False, "oldest": None, "failsafe": False}
+    state = {"viewers": 0, "healthy": False, "oldest": None, "failsafe": False, "snapshot": {}}
     stop = threading.Event()
     threading.Thread(
         target=_poll, args=(base, secret, settings, state, stop), daemon=True
@@ -97,6 +107,7 @@ def main() -> None:
     kill_button.pack(pady=(9, 0))
 
     def refresh():
+        snapshot = state.get("snapshot", {})
         viewers = state["viewers"]
         if viewers > 0:
             label.config(text=f"● DESKTOP IS BEING VIEWED — {viewers} viewer{'s' if viewers != 1 else ''}")
@@ -108,6 +119,7 @@ def main() -> None:
                 detail.config(text="Active remote viewing · local kill available")
             kill_button.pack(pady=(9, 0))
             root.deiconify()
+            root.attributes("-topmost", True)
         elif not state["healthy"]:
             label.config(text="WATCHPORT CONTROL PLANE DISCONNECTED")
             detail.config(
@@ -120,7 +132,14 @@ def main() -> None:
             detail.config(text=datetime.now().strftime("Indicator healthy · %H:%M:%S"))
             kill_button.pack_forget()
             root.withdraw()
-        root.after(500, refresh)
+        # Only the GUI thread can certify this revision was processed. The
+        # network thread stops heartbeating if rendering stalls.
+        root.update_idletasks()
+        token = snapshot.get("displayToken")
+        if snapshot.get("viewers", 0) > 0 and not root.winfo_ismapped():
+            token = None
+        state["rendered"] = (token, time.monotonic())
+        root.after(250, refresh)
 
     def close():
         # Closing the indicator intentionally makes the gateway's heartbeat test

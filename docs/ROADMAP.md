@@ -1,5 +1,7 @@
 # Roadmap
 
+Current execution order is the four milestones in [MAC-AGENT-HANDOFF.md](MAC-AGENT-HANDOFF.md). The phases below describe the original design sequence, not completion status. Gateway, passkeys, adapter, indicator and preliminary host tooling are implemented; Phase 0 real-host evidence remains the critical gate. See [BUILD_STATUS.md](BUILD_STATUS.md).
+
 ## Phase 0 — Validate the streaming substrate
 
 Goal: prove that the browser streaming path is viable before building product infrastructure around it.
