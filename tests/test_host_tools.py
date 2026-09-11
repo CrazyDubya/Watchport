@@ -45,6 +45,20 @@ def test_config_init_is_private_and_never_overwrites_credentials(tmp_path, monke
     assert defaults.stream_origin == settings.stream_origin
 
 
+@pytest.mark.parametrize('player_port', [0, 443, 8443, 65536])
+def test_config_init_rejects_invalid_or_shared_https_port(tmp_path, player_port):
+    path = tmp_path / 'config.env'
+    with pytest.raises(ValueError, match='player HTTPS port'):
+        init_config(path, 'desktop.example.ts.net', 8787, player_port)
+    assert not path.exists()
+
+
+def test_config_init_accepts_an_explicit_player_port(tmp_path):
+    path = tmp_path / 'config.env'
+    init_config(path, 'desktop.example.ts.net', 8787, 10443)
+    assert 'WATCHPORT_STREAM_ORIGIN=https://desktop.example.ts.net:10443' in path.read_text()
+
+
 def test_shell_syntax_in_config_is_never_executed(tmp_path, monkeypatch):
     path = tmp_path / 'config.env'
     marker = tmp_path / 'must-not-exist'

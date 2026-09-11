@@ -6,6 +6,8 @@ Watchport :8443 and the player origin :9443 share a hostname so the host-scoped 
 
 The agreed host layout reserves `127.0.0.1:8787` for the gateway and `127.0.0.1:8788` for the player-only proxy. Serve HTTPS :8443 targets the gateway; HTTPS :9443 will target the validated proxy. Preserve the existing Serve routes on :443 and :10000. The assigned player port does not change Moonlight's loopback management origin.
 
+A different port avoids a route collision but does not isolate cookies from another application on the same hostname. Before enrollment, review every service sharing that hostname, including existing Funnel routes: it must not receive or log Watchport/player cookies or overwrite them. If that trust boundary cannot be established, use a dedicated Tailscale service/device hostname for both Watchport origins. Private-perimeter acceptance remains blocked until denied-device and Tailscale-disconnected tests pass on the final topology.
+
 Do not point Tailscale Serve at the entire Moonlight management listener. `HttpServer::processRequest` and `RequestGuard` can grant localhost privileges based on the reverse proxy's peer address/Host. Preserving or rewriting Host alone is not an adequate security boundary.
 
 The target Mac agent must implement and validate one of:

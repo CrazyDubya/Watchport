@@ -12,7 +12,7 @@ The Linux-side implementation is prepared. **No real Mac or iPhone acceptance ha
 | Player-only ingress | 9443 | 127.0.0.1:8788 (reserved for proxy) |
 | Existing services | 443 and 10000 | Preserve their existing routes |
 
-Set `WATCHPORT_STREAM_ORIGIN=https://ACTUAL-DEVICE.ACTUAL-TAILNET.ts.net:9443`. Keep the gateway origin on :8443. New config generation uses this layout; existing config is preserved and must be edited locally if it still points the player at :443. Permit intended viewer devices on TCP :8443 and :9443 in tailnet policy; loopback :8787/:8788 are not viewer-facing grants. Inspect and preserve all existing Serve routes; do not use a global Serve reset. The Moonlight management origin is a separate, locally verified setting.
+Set `WATCHPORT_STREAM_ORIGIN=https://ACTUAL-DEVICE.ACTUAL-TAILNET.ts.net:9443`. Keep the gateway origin on :8443. New config generation uses this layout; existing config is preserved and must be edited locally if it still points the player at :443. Permit intended viewer devices on TCP :8443 and :9443 in tailnet policy; loopback :8787/:8788 are not viewer-facing grants. Inspect and preserve all existing Serve routes; do not use a global Serve reset. The Moonlight management origin is a separate, locally verified setting. `host init --player-port PORT` can select another unused player HTTPS port; it must differ from Watchport HTTPS 8443 and does not publish a route.
 
 ## 1. Validate the real streaming stack and private routing
 

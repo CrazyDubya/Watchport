@@ -73,6 +73,8 @@ Preserve existing Serve routes on HTTPS :443 and :10000. Watchport HTTPS :8443 t
 
 This same-hostname requirement is deliberate: Watchport redeems the Moonlight player PIN locally and sets Moonlight's scoped `mw_player` cookie from the authenticated Watchport response. Cookies are host-scoped rather than port-scoped.
 
+Before enrollment, follow the co-hosted-service review in [PLAYER-INGRESS.md](PLAYER-INGRESS.md). Different ports do not isolate cookies from unrelated applications on the same hostname.
+
 Copy `.env.example` into the service environment and set at minimum:
 
 ```text

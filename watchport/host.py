@@ -45,15 +45,17 @@ def launchctl(*args: str, check: bool = True):
     return result
 
 
-def init_config(path: Path, hostname: str, port: int) -> None:
+def init_config(path: Path, hostname: str, port: int, player_port: int = 9443) -> None:
     if not re.fullmatch(r'[a-z0-9][a-z0-9.-]*\.ts\.net', hostname):
         raise ValueError('use the actual device MagicDNS hostname ending in .ts.net')
     if not 1024 <= port <= 65535:
         raise ValueError('local gateway port must be between 1024 and 65535')
+    if not 1024 <= player_port <= 65535 or player_port == 8443:
+        raise ValueError('player HTTPS port must be between 1024 and 65535 and differ from Watchport HTTPS 8443')
     values = {
         'WATCHPORT_HOST': '127.0.0.1', 'WATCHPORT_PORT': str(port),
         'WATCHPORT_ORIGIN': f'https://{hostname}:8443', 'WATCHPORT_RP_ID': hostname,
-        'WATCHPORT_STREAM_ORIGIN': f'https://{hostname}:9443',
+        'WATCHPORT_STREAM_ORIGIN': f'https://{hostname}:{player_port}',
         'WATCHPORT_INDICATOR_SECRET': secrets.token_urlsafe(32),
         'WATCHPORT_DATA_DIR': str(path.parent), 'WATCHPORT_COOKIE_SECURE': 'true',
         'WATCHPORT_MOONLIGHT_ORIGIN': 'https://127.0.0.1',
@@ -110,6 +112,8 @@ def main() -> None:
     init = sub.add_parser('init')
     init.add_argument('--hostname', required=True)
     init.add_argument('--port', type=int, default=8787)
+    init.add_argument('--player-port', type=int, default=9443,
+                      help='player-only HTTPS ingress port (default: 9443); does not publish a route')
     install_cmd = sub.add_parser('install')
     install_cmd.add_argument('--dry-run', action='store_true')
     install_cmd.add_argument('--output', type=Path)
@@ -119,7 +123,7 @@ def main() -> None:
     config = args.config.expanduser().absolute()
     try:
         if args.command == 'init':
-            init_config(config, args.hostname, args.port)
+            init_config(config, args.hostname, args.port, args.player_port)
             return
         os.environ['WATCHPORT_CONFIG_FILE'] = str(config)
         settings = Settings.from_env()
