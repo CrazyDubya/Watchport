@@ -2,10 +2,13 @@
 
 **0.3.0.dev1: integration preparation; target-system acceptance pending.** This branch improves the security/control plane and prepares the four Mac milestones. It does not contain a verified Mac/iPhone streaming deployment or measured latency results.
 
+**Mac preflight, 2026-09-10 local date:** macOS 26.3.1 arm64, Python 3.12.7/Tk 8.6.14 and Tailscale 1.102.3 inspected. Final automated checks pass (59 Python, 5 browser). Live acceptance remains **blocked**: the official Moonlight-Web v0.2.4 package predates the required activation contract, fails macOS package signature assessment, and has no verified private listener/ingress. No streaming services or routes were started. All 19 live cases and all three network measurement sets remain blocked; recorder exit 1 is expected. See [sanitized Mac evidence](research/MAC-ACCEPTANCE-2026-09-10.md).
+
 ## Implemented
 
 - Passkeys with required user verification, one-use first-key bootstrap, session expiry, CSRF, secure cookies, and metadata-only audit logging.
 - Ephemeral backend Viewer grants with local PIN redemption, explicit Internet Access configuration checks, input-permission verification, and verified `slot/state=off` revocation responses.
+- Admission/probe also require explicitly disabled UPnP. Missing `local_only` on older upstream activations is diagnosed as incompatible and fails closed. Router mappings still require independent verification.
 - Every configured slot must revoke successfully. Partial cleanup or failed admission with uncertain revocation blocks new viewing; the gateway retries cleanup. Failed startup cleanup explicitly signals a visible warning even when the restarted gateway has no viewer records.
 - The GUI acknowledges a fresh warning revision before capability release. A frozen GUI stops indicator heartbeats. Gateway and indicator independently revoke dedicated player slots and serialize owner operations across processes.
 - Phone shell with deliberate reopening after background, stale-admission rejection, revocation before reconnect, bounded foreground network retries, safe-area layout, and fullscreen fallback.
@@ -21,6 +24,8 @@
 | Supervision + recovery | Independent user LaunchAgents, private config, safe cleanup on uninstall | Both-process death and logout behavior, install/upgrade/recovery, Tk compatibility and log growth |
 
 Run [MAC-AGENT-HANDOFF.md](MAC-AGENT-HANDOFF.md) in order. [PLAYER-INGRESS.md](PLAYER-INGRESS.md) is a hard integration gate: reverse-proxying Moonlight's full localhost server could expose owner APIs.
+
+Assigned ports are Watchport HTTPS 8443 → loopback 8787 and player HTTPS 9443 → reserved loopback proxy 8788. Existing routes on 443/10000 are preserved. Different ports do not isolate host-scoped cookies from co-hosted services; the existing unrelated Funnel surface requires review or a dedicated service/device hostname before enrollment. This allocation is not a deployed or accepted topology.
 
 ## Threats to the design goals
 
