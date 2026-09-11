@@ -33,7 +33,16 @@ def test_config_init_is_private_and_never_overwrites_credentials(tmp_path, monke
     monkeypatch.setenv('WATCHPORT_CONFIG_FILE', str(path))
     settings = Settings.from_env()
     assert settings.port == 8787
+    assert settings.origin == 'https://desktop.example.ts.net:8443'
+    assert settings.stream_origin == 'https://desktop.example.ts.net:9443'
     assert len(settings.indicator_secret) >= 32
+    monkeypatch.delenv('WATCHPORT_PORT')
+    monkeypatch.delenv('WATCHPORT_STREAM_ORIGIN')
+    path.write_text('\n'.join(line for line in path.read_text().splitlines()
+        if not line.startswith(('WATCHPORT_PORT=', 'WATCHPORT_STREAM_ORIGIN='))) + '\n')
+    defaults = Settings.from_env()
+    assert defaults.port == settings.port
+    assert defaults.stream_origin == settings.stream_origin
 
 
 def test_shell_syntax_in_config_is_never_executed(tmp_path, monkeypatch):

@@ -2,7 +2,9 @@
 
 Status: **integration blocker until implemented and tested on the target stack**.
 
-Watchport :8443 and the player origin :443 share a hostname so the host-scoped `mw_player` cookie can cross ports. Cookies are not isolated by port: the ingress must strip Watchport/owner cookies before forwarding. Keep the player a different origin (port) from Watchport so its iframe cannot access the parent application DOM.
+Watchport :8443 and the player origin :9443 share a hostname so the host-scoped `mw_player` cookie can cross ports. Cookies are not isolated by port: the ingress must strip Watchport/owner cookies before forwarding. Keep the player a different origin (port) from Watchport so its iframe cannot access the parent application DOM.
+
+The agreed host layout reserves `127.0.0.1:8787` for the gateway and `127.0.0.1:8788` for the player-only proxy. Serve HTTPS :8443 targets the gateway; HTTPS :9443 will target the validated proxy. Preserve the existing Serve routes on :443 and :10000. The assigned player port does not change Moonlight's loopback management origin.
 
 Do not point Tailscale Serve at the entire Moonlight management listener. `HttpServer::processRequest` and `RequestGuard` can grant localhost privileges based on the reverse proxy's peer address/Host. Preserving or rewriting Host alone is not an adequate security boundary.
 

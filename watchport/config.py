@@ -110,7 +110,7 @@ class Settings:
         if rp_id != public_host:
             raise RuntimeError("WATCHPORT_RP_ID must match WATCHPORT_ORIGIN hostname")
 
-        stream_origin = os.getenv("WATCHPORT_STREAM_ORIGIN", f"https://{public_host}").rstrip("/")
+        stream_origin = os.getenv("WATCHPORT_STREAM_ORIGIN", f"https://{public_host}:9443").rstrip("/")
         if _hostname(stream_origin) != public_host:
             raise RuntimeError(
                 "WATCHPORT_STREAM_ORIGIN must use the same hostname as WATCHPORT_ORIGIN so the scoped player cookie can cross ports"
@@ -147,7 +147,7 @@ class Settings:
 
         return cls(
             host=host,
-            port=_int("WATCHPORT_PORT", 8443),
+            port=_int("WATCHPORT_PORT", 8787),
             origin=origin,
             rp_id=rp_id,
             data_dir=Path(os.getenv("WATCHPORT_DATA_DIR", "~/.watchport")).expanduser(),

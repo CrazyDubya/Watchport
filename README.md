@@ -53,6 +53,8 @@ flowchart TD
 
 The player ingress is a **remaining implementation and acceptance gate**. Read [PLAYER-INGRESS.md](docs/PLAYER-INGRESS.md) before exposing Moonlight; a generic proxy to its localhost server can expose owner APIs.
 
+Host port allocation: Watchport HTTPS :8443 → `127.0.0.1:8787`; player HTTPS :9443 → `127.0.0.1:8788` (reserved for the player-only proxy). Preserve existing routes on :443 and :10000. Tailnet policy must allow intended viewer devices on TCP :8443 and :9443; verify any direct media ports separately.
+
 The preferred deployment keeps Watchport's HTTP listener private on loopback. Moonlight-Web's own **Internet Access must remain disabled**. During live setup we will choose the best Tailscale-only exposure for Moonlight signaling/media while preserving direct WebRTC where possible.
 
 ## First setup commands

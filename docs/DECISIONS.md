@@ -44,7 +44,9 @@ Reserve warning state, wait for the GUI thread to acknowledge a fresh revision, 
 
 **Status:** Required; target ingress implementation pending
 
-Watchport :8443 and player :443 use the same hostname but distinct origins. Cookies cross ports, so player ingress must strip owner/Watchport cookies. Never expose the full Moonlight localhost API via a proxy that makes remote requests appear local. Pin and validate an exact upstream version. Existing owner streams can override the requested Desktop; strict identity verification is a remaining upstream contract requirement.
+Watchport :8443 and player :9443 use the same hostname but distinct origins. Cookies cross ports, so player ingress must strip owner/Watchport cookies. Never expose the full Moonlight localhost API via a proxy that makes remote requests appear local. Pin and validate an exact upstream version. Existing owner streams can override the requested Desktop; strict identity verification is a remaining upstream contract requirement.
+
+**Deployment update, 2026-09-11:** the project owner assigned HTTPS :9443 to the player to preserve existing routes on :443 and :10000. Watchport remains HTTPS :8443 → loopback :8787; the player-only proxy is reserved on loopback :8788. Intended viewer devices need tailnet access to TCP :8443 and :9443. Direct media ports remain subject to the separately verified media topology.
 
 ## ADR-0008 — Phone backgrounding ends viewing intent
 

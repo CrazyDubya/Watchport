@@ -4,6 +4,16 @@ The project owner has authorized repository changes and working through the four
 
 The Linux-side implementation is prepared. **No real Mac or iPhone acceptance has been performed here.** Return evidence rather than marking implementation as live acceptance. Do not publish credentials or raw environment/network dumps to this public repository.
 
+## Agreed port layout — 2026-09-11
+
+| Service | Tailnet HTTPS | Loopback target |
+| --- | --- | --- |
+| Watchport / passkeys | 8443 | 127.0.0.1:8787 |
+| Player-only ingress | 9443 | 127.0.0.1:8788 (reserved for proxy) |
+| Existing services | 443 and 10000 | Preserve their existing routes |
+
+Set `WATCHPORT_STREAM_ORIGIN=https://ACTUAL-DEVICE.ACTUAL-TAILNET.ts.net:9443`. Keep the gateway origin on :8443. New config generation uses this layout; existing config is preserved and must be edited locally if it still points the player at :443. Permit intended viewer devices on TCP :8443 and :9443 in tailnet policy; loopback :8787/:8788 are not viewer-facing grants. Inspect and preserve all existing Serve routes; do not use a global Serve reset. The Moonlight management origin is a separate, locally verified setting.
+
 ## 1. Validate the real streaming stack and private routing
 
 1. Fetch `codex/mac-integration-readiness` from CrazyDubya/Watchport into an isolated worktree. Record its commit. Inspect installed Tailscale, Sunshine and Moonlight-Web versions before installing anything.
@@ -16,7 +26,7 @@ The Linux-side implementation is prepared. **No real Mac or iPhone acceptance ha
    .venv/bin/python -m watchport.host init --hostname ACTUAL-DEVICE.ACTUAL-TAILNET.ts.net
    ```
 
-   Edit `~/.watchport/config.env` locally (0600). Check actual Moonlight HTTPS port, then set host UUID and Desktop app ID using `.venv/bin/python -m watchport.doctor`. The generated gateway uses local port 8787; public-to-the-tailnet Watchport HTTPS uses 8443. This avoids Moonlight's common 8443 fallback conflict. All commands load this config automatically.
+   Edit `~/.watchport/config.env` locally (0600). Check actual Moonlight management HTTPS port, then set host UUID and Desktop app ID using `.venv/bin/python -m watchport.doctor`. The generated gateway uses local port 8787; tailnet Watchport HTTPS uses 8443 and player HTTPS uses 9443. All commands load this config automatically.
 6. Run gateway and indicator in the GUI login session. Publish only the gateway while bootstrapping, after inspecting existing Serve configuration:
 
    ```sh
@@ -24,9 +34,9 @@ The Linux-side implementation is prepared. **No real Mac or iPhone acceptance ha
    tailscale serve --bg --https=8443 http://127.0.0.1:8787
    ```
 
-   Preserve unrelated Serve routes and tailnet policy. Never use Funnel or an unrestricted policy.
+   Preserve existing Serve routes on 443 and 10000 and unrelated tailnet policy. Never use Funnel or an unrestricted policy.
 7. **Do not expose the complete Moonlight localhost server through a generic reverse proxy.** Its localhost trust can turn remote requests into management requests. Complete a player-only ingress for the exact installed version, or prove a direct tailnet listener preserves remote-peer identity and blocks management. Read `PLAYER-INGRESS.md`; add a reviewed implementation/configuration and negative tests to the branch. Keep direct media behind tailnet policy as well.
-8. From another allowed tailnet device, verify management isolation, then verify Watchport/player/media are unreachable from a denied device and with Tailscale disconnected. Check direct versus DERP routing and actual WebRTC candidates. Do not record raw addresses/credentials in a public report.
+8. After the player-only proxy on `127.0.0.1:8788` passes its local isolation tests, map only HTTPS :9443 to it. Check the installed Serve CLI and preserve existing routes. From another allowed tailnet device, verify management isolation, then verify Watchport/player/media are unreachable from a denied device and with Tailscale disconnected. Check direct versus DERP routing and actual WebRTC candidates. Do not record raw addresses/credentials in a public report.
 
 **Exit:** intended Desktop in Safari over tailnet only, real backend no-input enforcement, verified player ingress, versioned topology report. If an upstream API or capture requirement fails, record the exact sanitized failure and implement the smallest correction in a separate commit. Do not loosen a security gate to obtain a demo.
 

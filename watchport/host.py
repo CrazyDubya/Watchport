@@ -53,7 +53,7 @@ def init_config(path: Path, hostname: str, port: int) -> None:
     values = {
         'WATCHPORT_HOST': '127.0.0.1', 'WATCHPORT_PORT': str(port),
         'WATCHPORT_ORIGIN': f'https://{hostname}:8443', 'WATCHPORT_RP_ID': hostname,
-        'WATCHPORT_STREAM_ORIGIN': f'https://{hostname}',
+        'WATCHPORT_STREAM_ORIGIN': f'https://{hostname}:9443',
         'WATCHPORT_INDICATOR_SECRET': secrets.token_urlsafe(32),
         'WATCHPORT_DATA_DIR': str(path.parent), 'WATCHPORT_COOKIE_SECURE': 'true',
         'WATCHPORT_MOONLIGHT_ORIGIN': 'https://127.0.0.1',

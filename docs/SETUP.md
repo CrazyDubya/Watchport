@@ -67,7 +67,9 @@ Choose the host's MagicDNS name, for example:
 Watchport uses the same hostname for two private HTTPS surfaces:
 
 - `https://desktop.example-tailnet.ts.net:8443` — Watchport/passkey gateway
-- `https://desktop.example-tailnet.ts.net` — Moonlight-Web player surface
+- `https://desktop.example-tailnet.ts.net:9443` — player-only ingress, backed by the reserved loopback proxy on 8788
+
+Preserve existing Serve routes on HTTPS :443 and :10000. Watchport HTTPS :8443 targets `127.0.0.1:8787`; player HTTPS :9443 is reserved for the validated player-only proxy at `127.0.0.1:8788`. Do not reset the host's Serve configuration.
 
 This same-hostname requirement is deliberate: Watchport redeems the Moonlight player PIN locally and sets Moonlight's scoped `mw_player` cookie from the authenticated Watchport response. Cookies are host-scoped rather than port-scoped.
 
@@ -76,7 +78,7 @@ Copy `.env.example` into the service environment and set at minimum:
 ```text
 WATCHPORT_ORIGIN=https://desktop.example-tailnet.ts.net:8443
 WATCHPORT_RP_ID=desktop.example-tailnet.ts.net
-WATCHPORT_STREAM_ORIGIN=https://desktop.example-tailnet.ts.net
+WATCHPORT_STREAM_ORIGIN=https://desktop.example-tailnet.ts.net:9443
 WATCHPORT_INDICATOR_SECRET=<strong random value>
 ```
 
@@ -112,7 +114,7 @@ This is **Serve**, not Funnel. Funnel is out of scope because it deliberately ma
 
 Use a dedicated destination tag or host selector for the desktop and grant only the devices/users that should be able to reach Watchport/Moonlight.
 
-Current Tailscale Grants support protocol/port-specific permissions such as `tcp:443`, `tcp:8443`, and `udp:<port>`. During live integration, narrow this to the actual Moonlight-Web/WebRTC ports verified on the host. Do not grant `*` merely for convenience.
+Current Tailscale Grants support protocol/port-specific permissions such as `tcp:8443`, `tcp:9443`, and `udp:<port>`. During live integration, narrow this to the actual Moonlight-Web/WebRTC ports verified on the host. Do not grant `*` merely for convenience.
 
 The desired end state is conceptually:
 
@@ -122,7 +124,7 @@ The desired end state is conceptually:
     {
       "src": ["<your user/group/device selector>"],
       "dst": ["<Watchport desktop selector>"],
-      "ip": ["tcp:443", "tcp:8443", "udp:<verified-webrtc-port>"]
+      "ip": ["tcp:8443", "tcp:9443", "udp:<verified-webrtc-port>"]
     }
   ]
 }
