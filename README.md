@@ -15,7 +15,7 @@ Watchport is intentionally **not remote desktop**.
 - ephemeral Moonlight-Web player-slot creation per Watchport stream
 - forced `Viewer` permissions (`gamepad=false`, `keyboardMouse=false`) verified before admission
 - local redemption of Moonlight's share PIN; the browser receives only its scoped `mw_player` cookie
-- refusal to operate if Moonlight-Web Internet Access/public rendezvous is enabled
+- refusal to operate if Moonlight-Web Internet Access or UPnP is enabled or unverified
 - separate always-on-top host indicator with GUI render acknowledgment before admission
 - browser heartbeat so abandoned/suspended viewers are reclaimed
 - gateway watchdog that revokes streams when authentication/indicator/viewer state expires

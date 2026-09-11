@@ -43,7 +43,7 @@ class FakeTransport:
         return self.cookie
 
     def internet_status(self):
-        return {"internet_access_enabled": False}
+        return {"internet_access_enabled": False, "upnp_enabled": False}
 
     def status(self):
         return {"slots": []}
@@ -194,3 +194,46 @@ def test_disconnected_rendezvous_does_not_override_enabled_internet_setting():
     with pytest.raises(StreamAdapterError, match='configuration check'):
         a.open('a')
     assert not any(c[0] == 'activate' for c in fake.calls)
+
+
+@pytest.mark.parametrize('upnp', [True, None, 0, 'false'])
+def test_enabled_or_unverified_upnp_blocks_probe_and_activation(upnp):
+    fake = FakeTransport()
+    fake.internet_status = lambda: {'internet_access_enabled': False, 'upnp_enabled': upnp}
+    a = adapter(fake)
+    for operation in (a.probe, lambda: a.open('a')):
+        with pytest.raises(StreamAdapterError, match='UPnP must be disabled'):
+            operation()
+        assert not fake.logged_in
+    assert not any(call[0] in {'activate', 'redeem'} for call in fake.calls)
+    assert a.grant_for('a') is None
+
+
+def test_missing_upnp_status_does_not_prove_private_configuration():
+    fake = FakeTransport()
+    fake.internet_status = lambda: {'internet_access_enabled': False}
+    with pytest.raises(StreamAdapterError, match='UPnP must be disabled'):
+        adapter(fake).open('a')
+    assert not any(call[0] == 'activate' for call in fake.calls)
+
+
+def test_v024_activation_without_local_only_is_rejected_and_revoked():
+    # Source-derived response shape from v0.2.4 (b7e1f66); synthetic credentials.
+    # That release ignores host_uuid/app_id/ttl_secs and omits local_only.
+    # This regression proves refusal, not live compatibility or video teardown.
+    fake = FakeTransport()
+    activation = fake.activate
+
+    def legacy_activate(*args):
+        result = activation(*args)
+        del result['local_only']
+        return result
+
+    fake.activate = legacy_activate
+    a = adapter(fake)
+    with pytest.raises(StreamAdapterError, match='incompatible upstream contract'):
+        a.open('a')
+    assert fake.calls.count(('deactivate', 2)) == 2
+    assert not any(call[0] == 'redeem' for call in fake.calls)
+    assert a.grant_for('a') is None
+    assert not a.uncertain

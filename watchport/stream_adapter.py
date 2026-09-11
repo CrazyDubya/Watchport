@@ -197,8 +197,11 @@ class MoonlightWebAdapter:
                 raise StreamAdapterError("Moonlight control lock timed out") from exc
 
     def _assert_private(self) -> None:
-        if self.transport.internet_status().get("internet_access_enabled") is not False:
+        status = self.transport.internet_status()
+        if status.get("internet_access_enabled") is not False:
             raise StreamAdapterError("Moonlight-Web Internet Access must be disabled (configuration check)")
+        if status.get("upnp_enabled") is not False:
+            raise StreamAdapterError("Moonlight-Web UPnP must be disabled (configuration check)")
 
     def _deactivate_verified(self, slot: int) -> None:
         result = self.transport.deactivate(slot)
@@ -241,6 +244,8 @@ class MoonlightWebAdapter:
         # Watchport never uses Moonlight-Web's public rendezvous/Internet Access.
         # This describes the returned link, not the Internet Access setting;
         # _assert_private separately checks that configuration before activation.
+        if "local_only" not in activation:
+            raise StreamAdapterError("Moonlight-Web activation lacks local_only; incompatible upstream contract")
         if activation.get("local_only") is not True:
             raise StreamAdapterError("Moonlight-Web Internet Access must be disabled for Watchport")
 

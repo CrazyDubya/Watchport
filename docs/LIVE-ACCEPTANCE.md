@@ -22,6 +22,7 @@ Use [MAC-AGENT-HANDOFF.md](MAC-AGENT-HANDOFF.md) and `watchport-acceptance` to r
 - [ ] The configured host UUID is the intended Sunshine host.
 - [ ] The configured app ID is the intended Desktop/session app.
 - [ ] Moonlight-Web Internet Access/rendezvous is disabled.
+- [ ] Moonlight-Web and Sunshine UPnP are disabled; existing router mappings are separately inspected.
 - [ ] Watchport gateway binds only to loopback.
 - [ ] No router port forward exists for Watchport, Moonlight-Web, Sunshine, or WebRTC.
 - [ ] Tailscale Funnel is not configured.

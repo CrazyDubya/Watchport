@@ -31,6 +31,8 @@ The selected API candidate is [linckosz/moonlight-web](https://github.com/lincko
 
 The 0.3.0.dev1 host/acceptance tooling uses Python's standard library and the existing Watchport stack; it adds no runtime package dependency. Browser lifecycle tests use Node's built-in test runner as development tooling.
 
+Mac preflight also inspected the separately downloaded Moonlight-Web v0.2.4 arm64 package and tag `b7e1f66fc2dc68d412ec8ae8a256fce26e4aedf5`. Its source notices specify GPL-3.0-or-later. It remains an unadopted external candidate: its installer was not run and no upstream source/binary is committed to Watchport. See [the contract mismatch](research/UPSTREAM-CONTRACT.md#mac-package-inspection--2026-09-10-local-date). The admission corrections add no dependency.
+
 Before selecting or importing any browser bridge:
 
 1. record exact upstream repository and version/commit
