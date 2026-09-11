@@ -5,6 +5,31 @@ import ipaddress
 import os
 from pathlib import Path
 from urllib.parse import urlparse
+import re
+import shlex
+
+
+def load_config_file() -> None:
+    """Read an explicit private environment file; never execute shell syntax."""
+    path = Path(os.getenv("WATCHPORT_CONFIG_FILE", "~/.watchport/config.env")).expanduser()
+    if not path.exists():
+        if "WATCHPORT_CONFIG_FILE" in os.environ:
+            raise RuntimeError("WATCHPORT_CONFIG_FILE does not exist")
+        return
+    info = path.stat()
+    if os.name != "nt" and (info.st_uid != os.getuid() or info.st_mode & 0o077):
+        raise RuntimeError("Watchport config must be owned by this user with mode 0600")
+    for number, line in enumerate(path.read_text().splitlines(), 1):
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        key, separator, value = line.partition("=")
+        key = key.strip()
+        if not separator or not re.fullmatch(r"WATCHPORT_[A-Z0-9_]+", key):
+            raise RuntimeError(f"invalid Watchport config entry on line {number}")
+        parts = shlex.split(value, comments=True)
+        if len(parts) > 1:
+            raise RuntimeError(f"quote spaces in Watchport config line {number}")
+        os.environ.setdefault(key, parts[0] if parts else "")
 
 
 def _bool(name: str, default: bool) -> bool:
@@ -30,7 +55,8 @@ def _slots(value: str) -> tuple[int, ...]:
 
 def _hostname(url: str) -> str:
     parsed = urlparse(url)
-    if parsed.scheme != "https" or not parsed.hostname:
+    if (parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password
+            or parsed.path not in {"", "/"} or parsed.query or parsed.fragment):
         raise RuntimeError(f"expected an https URL, got {url!r}")
     return parsed.hostname.lower()
 
@@ -77,26 +103,34 @@ class Settings:
 
     @classmethod
     def from_env(cls) -> "Settings":
+        load_config_file()
         origin = os.getenv("WATCHPORT_ORIGIN", "https://watchport.example-tailnet.ts.net:8443").rstrip("/")
         public_host = _hostname(origin)
         rp_id = os.getenv("WATCHPORT_RP_ID", public_host).strip().lower()
         if rp_id != public_host:
             raise RuntimeError("WATCHPORT_RP_ID must match WATCHPORT_ORIGIN hostname")
 
-        stream_origin = os.getenv("WATCHPORT_STREAM_ORIGIN", f"https://{public_host}").rstrip("/")
+        stream_origin = os.getenv("WATCHPORT_STREAM_ORIGIN", f"https://{public_host}:9443").rstrip("/")
         if _hostname(stream_origin) != public_host:
             raise RuntimeError(
                 "WATCHPORT_STREAM_ORIGIN must use the same hostname as WATCHPORT_ORIGIN so the scoped player cookie can cross ports"
             )
+        if (urlparse(stream_origin).port or 443) == (urlparse(origin).port or 443):
+            raise RuntimeError("Watchport and player must use different HTTPS ports to isolate the iframe origin")
 
         moonlight_origin = os.getenv("WATCHPORT_MOONLIGHT_ORIGIN", "https://127.0.0.1").rstrip("/")
         moonlight_parsed = urlparse(moonlight_origin)
-        if moonlight_parsed.scheme != "https" or not _is_loopback_host(moonlight_parsed.hostname):
+        _hostname(moonlight_origin)
+        if not _is_loopback_host(moonlight_parsed.hostname):
             raise RuntimeError("WATCHPORT_MOONLIGHT_ORIGIN must be an https loopback URL")
 
         secret = os.getenv("WATCHPORT_INDICATOR_SECRET", "")
         if len(secret) < 24:
             raise RuntimeError("WATCHPORT_INDICATOR_SECRET is required and must be at least 24 characters")
+        if secret.startswith("replace-with-"):
+            raise RuntimeError("replace the example indicator secret with a randomly generated value")
+        if not _bool("WATCHPORT_COOKIE_SECURE", True):
+            raise RuntimeError("Watchport session cookies must remain Secure")
 
         host = os.getenv("WATCHPORT_HOST", "127.0.0.1")
         if not _is_loopback_host(host):
@@ -113,7 +147,7 @@ class Settings:
 
         return cls(
             host=host,
-            port=_int("WATCHPORT_PORT", 8443),
+            port=_int("WATCHPORT_PORT", 8787),
             origin=origin,
             rp_id=rp_id,
             data_dir=Path(os.getenv("WATCHPORT_DATA_DIR", "~/.watchport")).expanduser(),

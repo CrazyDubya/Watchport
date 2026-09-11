@@ -27,7 +27,11 @@ Preferred Watchport integration model:
 
 ### Moonlight / browser streaming bridges
 
-Moonlight-derived or Moonlight-compatible projects have their own licenses. The browser candidate investigated for the initial architecture may be GPL-licensed.
+The selected API candidate is [linckosz/moonlight-web](https://github.com/linckosz/moonlight-web), inspected at `ff98a358a6bb53340d2b33b4bdf0f7a72311a12d` on 2026-09-10. Its [README](https://github.com/linckosz/moonlight-web/blob/ff98a358a6bb53340d2b33b4bdf0f7a72311a12d/README.md) declares GPL-3.0, and its [LICENSE](https://github.com/linckosz/moonlight-web/blob/ff98a358a6bb53340d2b33b4bdf0f7a72311a12d/LICENSE) contains GNU GPL version 3. Watchport uses a separately installed network service; no upstream source or binaries are copied into this repository. Real-host version/adoption acceptance remains pending. A future bundled distribution or upstream fork must retain the applicable notices, credits and source obligations; this branch does neither.
+
+The 0.3.0.dev1 host/acceptance tooling uses Python's standard library and the existing Watchport stack; it adds no runtime package dependency. Browser lifecycle tests use Node's built-in test runner as development tooling.
+
+Mac preflight also inspected the separately downloaded Moonlight-Web v0.2.4 arm64 package and tag `b7e1f66fc2dc68d412ec8ae8a256fce26e4aedf5`. Its source notices specify GPL-3.0-or-later. It remains an unadopted external candidate: its installer was not run and no upstream source/binary is committed to Watchport. See [the contract mismatch](research/UPSTREAM-CONTRACT.md#mac-package-inspection--2026-09-10-local-date). The admission corrections add no dependency.
 
 Before selecting or importing any browser bridge:
 
