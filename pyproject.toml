@@ -11,7 +11,7 @@ license = {text = "MIT"}
 dependencies = [
   "fastapi>=0.128,<1",
   "uvicorn[standard]>=0.35,<1",
-  "webauthn>=2.7,<3",
+  "webauthn>=2.7,<4",
 ]
 
 [project.optional-dependencies]
