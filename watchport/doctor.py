@@ -16,6 +16,7 @@ def _adapter(settings: Settings) -> MoonlightWebAdapter:
         app_id=settings.moonlight_app_id,
         ttl_seconds=settings.moonlight_ttl_seconds,
         verify_tls=settings.moonlight_verify_tls,
+        lock_path=settings.data_dir / "moonlight-control.lock",
     )
 
 

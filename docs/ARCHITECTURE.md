@@ -1,3 +1,5 @@
+> Current implementation and remaining boundaries: [BUILD_STATUS.md](BUILD_STATUS.md), [PLAYER-INGRESS.md](PLAYER-INGRESS.md), and ADR-0006–0010 in [DECISIONS.md](DECISIONS.md). The gateway waits for a GUI warning revision acknowledgment before minting authority; uncertain revocation blocks admission. Mac supervision is prepared but not live-validated.
+
 # Architecture
 
 ## Goal

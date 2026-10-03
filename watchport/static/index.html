@@ -4,6 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#090b0d">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="manifest" href="/static/manifest.webmanifest">
   <title>Watchport</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
@@ -25,16 +28,19 @@
     </section>
     <section id="viewer" hidden>
       <div class="toolbar">
-        <span id="live">READY</span>
-        <span id="streamHealth"></span>
+        <span id="live" role="status" aria-live="polite">READY</span>
+        <span id="streamHealth" role="status"></span>
         <button id="startButton">Open desktop</button>
         <button id="stopButton" class="secondary" hidden>Close view</button>
+        <button id="reconnectButton" class="secondary" hidden>Reconnect</button>
+        <button id="fullscreenButton" class="secondary" disabled>Fullscreen</button>
         <button id="logoutButton" class="ghost">Lock</button>
       </div>
+      <p id="admissionTime" class="hint"></p>
       <iframe
         id="stream"
         title="View-only desktop stream"
-        allow="autoplay; fullscreen"
+        allow="autoplay; fullscreen" allowfullscreen
         sandbox="allow-scripts allow-same-origin allow-presentation"
         referrerpolicy="no-referrer"
         src="about:blank"></iframe>

@@ -23,3 +23,28 @@ def test_viewer_count_is_idempotent_and_tracks_oldest_start():
     indicator.clear()
     assert indicator.viewer_count() == 0
     assert indicator.oldest_started_at() is None
+
+
+def test_warning_requires_current_render_ack_and_invalidates_stale_ack():
+    indicator = IndicatorState('x' * 32, 5)
+    indicator.heartbeat()
+    indicator.viewer_start('a')
+    assert not indicator.confirmed('a')
+    token = indicator.snapshot()['displayToken']
+    indicator.heartbeat(rendered_token=token)
+    assert indicator.confirmed('a')
+    indicator.viewer_start('b')
+    indicator.heartbeat(rendered_token=token)
+    assert not indicator.confirmed('b')
+    assert not indicator.confirmed('a')
+    indicator.heartbeat(rendered_token=indicator.snapshot()['displayToken'])
+    assert indicator.confirmed('a') and indicator.confirmed('b')
+
+
+def test_ack_from_previous_gateway_instance_cannot_confirm_warning():
+    old = IndicatorState('x' * 32, 5)
+    old.viewer_start('a')
+    fresh = IndicatorState('x' * 32, 5)
+    fresh.viewer_start('a')
+    fresh.heartbeat(rendered_token=old.snapshot()['displayToken'])
+    assert not fresh.confirmed('a')

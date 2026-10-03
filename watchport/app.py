@@ -47,8 +47,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app_id=settings.moonlight_app_id,
         ttl_seconds=settings.moonlight_ttl_seconds,
         verify_tls=settings.moonlight_verify_tls,
+        lock_path=settings.data_dir / "moonlight-control.lock",
     )
 
+    lifecycle = RLock()
     challenges: dict[str, tuple[bytes, float, str]] = {}
     challenge_lock = RLock()
     runtime = {"adapterHealthy": True, "lastAdapterError": ""}
@@ -62,23 +64,43 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         runtime["lastAdapterError"] = ""
 
     def revoke_stream(session, *, reason: str, close_session: bool) -> bool:
-        try:
-            adapter.close(session.token)
+        with lifecycle:
+            try:
+                adapter.close(session.token)
+                if adapter.uncertain:
+                    raise StreamAdapterError("upstream revocation remains uncertain")
+                adapter_ok()
+            except StreamAdapterError as exc:
+                adapter_error(exc)
+                audit.event("stream_revoke_failed", reason=reason, error=type(exc).__name__)
+                return False
+            indicator.viewer_stop(session.token)
+            if close_session:
+                sessions.close(session)
+            else:
+                sessions.stop_stream(session)
+            audit.event("stream_revoked", reason=reason)
+            return True
+
+    def recover_slots() -> None:
+        with lifecycle:
+            try:
+                adapter.cleanup_stale_slots()
+            except StreamAdapterError as exc:
+                adapter_error(exc)
+                return
+            for session in sessions.streaming():
+                sessions.close(session)
+            indicator.clear()
             adapter_ok()
-        except StreamAdapterError as exc:
-            adapter_error(exc)
-            audit.event("stream_revoke_failed", reason=reason, error=type(exc).__name__)
-            return False
-        indicator.viewer_stop(session.token)
-        if close_session:
-            sessions.close(session)
-        else:
-            sessions.stop_stream(session)
-        audit.event("stream_revoked", reason=reason)
-        return True
+            audit.event("stream_slots_recovered")
 
     async def watchdog() -> None:
+        last_recovery = 0.0
         while True:
+            if not runtime["adapterHealthy"] and time.monotonic() - last_recovery > 5:
+                last_recovery = time.monotonic()
+                await asyncio.to_thread(recover_slots)
             now = time.time()
             indicator_healthy = indicator.healthy(now)
             for session in sessions.streaming():
@@ -113,10 +135,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 await task
             except asyncio.CancelledError:
                 pass
-            try:
-                await asyncio.to_thread(adapter.revoke_all)
-            finally:
-                indicator.clear()
+            await asyncio.to_thread(adapter.revoke_all)
+            indicator.clear()
 
     app = FastAPI(
         title="Watchport", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan
@@ -142,7 +162,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
-            "connect-src 'self'; frame-src https:; object-src 'none'; base-uri 'none'; "
+            f"connect-src 'self'; frame-src {settings.stream_origin}; object-src 'none'; base-uri 'none'; "
             "form-action 'self'; frame-ancestors 'none'"
         )
         if settings.cookie_secure:
@@ -273,56 +293,68 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/logout")
     def logout(request: Request, response: Response):
-        session = require_session(request)
-        require_csrf(request, session)
-        if session.state == State.STREAMING and not revoke_stream(
-            session, reason="logout", close_session=True
-        ):
-            raise HTTPException(503, "could not prove the external stream was revoked")
-        else:
-            sessions.close(session)
-        response.delete_cookie(COOKIE, path="/")
-        response.delete_cookie(PLAYER_COOKIE, path="/", secure=True, samesite="strict")
-        audit.event("logout")
-        return {"ok": True}
+        with lifecycle:
+            session = require_session(request)
+            require_csrf(request, session)
+            if session.state == State.STREAMING and not revoke_stream(
+                session, reason="logout", close_session=True
+            ):
+                raise HTTPException(503, "could not prove the external stream was revoked")
+            else:
+                sessions.close(session)
+            response.delete_cookie(COOKIE, path="/")
+            response.delete_cookie(PLAYER_COOKIE, path="/", secure=True, samesite="strict")
+            audit.event("logout")
+            return {"ok": True}
+
 
     @app.post("/api/view/start")
     def view_start(request: Request, response: Response):
-        session = require_session(request)
-        require_csrf(request, session)
-        if not settings.stream_configured:
-            raise HTTPException(503, "Moonlight-Web host/app is not configured")
-        if not indicator.healthy():
-            raise HTTPException(503, "host indicator is not healthy")
-        if session.state == State.STREAMING:
-            grant = adapter.grant_for(session.token)
-            if not grant:
-                sessions.close(session)
-                raise HTTPException(503, "stream/session state is inconsistent; reauthenticate")
-        else:
+        with lifecycle:
+            session = require_session(request)
+            require_csrf(request, session)
+            if not settings.stream_configured:
+                raise HTTPException(503, "Moonlight-Web host/app is not configured")
+            if not runtime["adapterHealthy"] or adapter.uncertain:
+                raise HTTPException(503, "stream cleanup is unresolved; admission blocked")
+            if not indicator.healthy():
+                raise HTTPException(503, "host indicator is not healthy")
+            started = time.monotonic()
             try:
-                sessions.admit(session, True)
+                if session.state != State.STREAMING:
+                    sessions.admit(session, True)
+                    # Reserve visible warning state BEFORE minting any authority.
+                    indicator.viewer_start(session.token)
+                deadline = time.monotonic() + settings.indicator_timeout_seconds
+                while not indicator.confirmed(session.token):
+                    if time.monotonic() >= deadline or not indicator.healthy():
+                        raise PermissionError("host warning was not acknowledged")
+                    time.sleep(0.05)
                 grant = adapter.open(session.token)
-                sessions.start_stream(session)
-                indicator.viewer_start(session.token, session.stream_started_at)
+                if not indicator.confirmed(session.token):
+                    raise PermissionError("host warning acknowledgement expired")
+                if session.state != State.STREAMING:
+                    sessions.start_stream(session)
+                elif sessions.get(session.token) is None:
+                    raise PermissionError("session expired during admission")
                 adapter_ok()
-                audit.event("stream_started", slot=grant.slot)
+                admission_ms = round((time.monotonic() - started) * 1000)
+                audit.event("stream_started", slot=grant.slot, admission_ms=admission_ms)
             except (PermissionError, StreamAdapterError) as exc:
-                sessions.stop_stream(session)
-                if isinstance(exc, StreamAdapterError):
+                # Includes expiry AFTER upstream minting; never abandon authority
+                # simply because the local state transition failed.
+                revoked = revoke_stream(session, reason="admission_failed", close_session=False)
+                if adapter.uncertain or not revoked:
                     adapter_error(exc)
-                    audit.event("stream_start_failed", error=type(exc).__name__)
-                raise HTTPException(503, str(exc)) from exc
-        response.set_cookie(
-            grant.cookie_name,
-            grant.cookie_value,
-            httponly=True,
-            secure=True,
-            samesite="strict",
-            max_age=grant.cookie_max_age,
-            path="/",
-        )
-        return {"viewerUrl": grant.viewer_url, "startedAt": session.stream_started_at}
+                elif session.state != State.STREAMING:
+                    indicator.viewer_stop(session.token)
+                audit.event("stream_start_failed", error=type(exc).__name__)
+                raise HTTPException(503, "view could not start safely; check host status") from exc
+            response.set_cookie(
+                grant.cookie_name, grant.cookie_value, httponly=True,
+                secure=True, samesite="strict", max_age=min(grant.cookie_max_age, max(1, int(session.expires_at - time.time()))), path="/",
+            )
+            return {"viewerUrl": grant.viewer_url, "startedAt": session.stream_started_at, "admissionMs": admission_ms}
 
     @app.post("/api/view/heartbeat")
     def view_heartbeat(request: Request):
@@ -336,26 +368,32 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/view/stop")
     def view_stop(request: Request, response: Response):
-        session = require_session(request)
-        require_csrf(request, session)
-        if session.state == State.STREAMING and not revoke_stream(
-            session, reason="user_stop", close_session=False
-        ):
-            raise HTTPException(503, "could not prove the external stream was revoked")
-        response.delete_cookie(PLAYER_COOKIE, path="/", secure=True, samesite="strict")
-        return {"ok": True}
+        with lifecycle:
+            session = require_session(request)
+            require_csrf(request, session)
+            if session.state == State.STREAMING and not revoke_stream(
+                session, reason="user_stop", close_session=False
+            ):
+                raise HTTPException(503, "could not prove the external stream was revoked")
+            response.delete_cookie(PLAYER_COOKIE, path="/", secure=True, samesite="strict")
+            return {"ok": True}
+
 
     @app.post("/internal/indicator/heartbeat")
-    def indicator_heartbeat(request: Request):
+    async def indicator_heartbeat(request: Request):
         if not request.client or request.client.host not in {"127.0.0.1", "::1"}:
             raise HTTPException(403, "indicator endpoint is localhost-only")
         if not indicator.authenticate(request.headers.get("x-watchport-indicator", "")):
             raise HTTPException(401, "bad indicator secret")
-        indicator.heartbeat()
-        return {
-            "viewers": indicator.viewer_count(),
-            "oldestStartedAt": indicator.oldest_started_at(),
-        }
+        try:
+            body = await request.json()
+        except ValueError:
+            raise HTTPException(400, "render acknowledgement required")
+        token = body.get("renderedToken") if isinstance(body, dict) else None
+        if token is not None and not isinstance(token, str):
+            raise HTTPException(400, "invalid render acknowledgement")
+        indicator.heartbeat(rendered_token=token)
+        return {**indicator.snapshot(), "cleanupUncertain": not runtime["adapterHealthy"]}
 
     @app.get("/internal/indicator/state")
     def indicator_state(request: Request):
@@ -371,17 +409,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/internal/indicator/kill")
     def indicator_kill(request: Request):
-        if not request.client or request.client.host not in {"127.0.0.1", "::1"}:
-            raise HTTPException(403)
-        if not indicator.authenticate(request.headers.get("x-watchport-indicator", "")):
-            raise HTTPException(401)
-        failures = 0
-        for session in sessions.streaming():
-            if not revoke_stream(session, reason="local_kill", close_session=True):
-                failures += 1
-        if failures:
-            raise HTTPException(503, f"{failures} stream(s) could not be confirmed revoked")
-        return {"ok": True}
+        with lifecycle:
+            if not request.client or request.client.host not in {"127.0.0.1", "::1"}:
+                raise HTTPException(403)
+            if not indicator.authenticate(request.headers.get("x-watchport-indicator", "")):
+                raise HTTPException(401)
+            failures = 0
+            for session in sessions.streaming():
+                if not revoke_stream(session, reason="local_kill", close_session=True):
+                    failures += 1
+            if adapter.uncertain:
+                # Failed admission can leave an upstream slot without a local
+                # STREAMING session. The host kill control must cover it too.
+                recover_slots()
+                if not runtime["adapterHealthy"]:
+                    raise HTTPException(503, "Viewer-slot cleanup remains unresolved")
+                failures = 0
+            if failures:
+                raise HTTPException(503, f"{failures} stream(s) could not be confirmed revoked")
+            return {"ok": True}
+
 
     # Expose internals only to tests/integration harnesses, never through HTTP.
     app.state.watchport = {

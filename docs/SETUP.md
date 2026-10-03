@@ -1,5 +1,7 @@
 # Target-system setup
 
+**Mac execution guide:** use [MAC-AGENT-HANDOFF.md](MAC-AGENT-HANDOFF.md) and [MAC-OPERATIONS.md](MAC-OPERATIONS.md). They include private config loading, a non-conflicting local port and supervision. This general guide remains background context. Complete [PLAYER-INGRESS.md](PLAYER-INGRESS.md) before exposing any Moonlight listener.
+
 This is the procedure to use when Watchport moves from pre-integration code to a real desktop. Do not skip the live acceptance checklist afterwards.
 
 ## 1. Prerequisites
@@ -20,7 +22,7 @@ Before integrating Watchport:
 
 1. Pair Moonlight-Web with Sunshine locally.
 2. Confirm ordinary local streaming works.
-3. **Disable Moonlight-Web Internet Access / rendezvous sharing.** Watchport rejects any activation that Moonlight reports as `local_only=false`.
+3. **Disable Moonlight-Web Internet Access / rendezvous sharing.** Watchport checks `internet_access_enabled=false` before activation and also requires the returned link to be local-only.
 4. Do not use Moonlight-Web player slots 2, 3, or 4 for unrelated sharing if Watchport is configured with the default slot set. Those become Watchport-owned safety capabilities.
 5. Do not grant Watchport remote-admin credentials. It uses Moonlight-Web's localhost-only rotating admin key plus an ephemeral, one-use PIN flow.
 
@@ -65,16 +67,20 @@ Choose the host's MagicDNS name, for example:
 Watchport uses the same hostname for two private HTTPS surfaces:
 
 - `https://desktop.example-tailnet.ts.net:8443` — Watchport/passkey gateway
-- `https://desktop.example-tailnet.ts.net` — Moonlight-Web player surface
+- `https://desktop.example-tailnet.ts.net:9443` — player-only ingress, backed by the reserved loopback proxy on 8788
+
+Preserve existing Serve routes on HTTPS :443 and :10000. Watchport HTTPS :8443 targets `127.0.0.1:8787`; player HTTPS :9443 is reserved for the validated player-only proxy at `127.0.0.1:8788`. Do not reset the host's Serve configuration.
 
 This same-hostname requirement is deliberate: Watchport redeems the Moonlight player PIN locally and sets Moonlight's scoped `mw_player` cookie from the authenticated Watchport response. Cookies are host-scoped rather than port-scoped.
+
+Before enrollment, follow the co-hosted-service review in [PLAYER-INGRESS.md](PLAYER-INGRESS.md). Different ports do not isolate cookies from unrelated applications on the same hostname.
 
 Copy `.env.example` into the service environment and set at minimum:
 
 ```text
 WATCHPORT_ORIGIN=https://desktop.example-tailnet.ts.net:8443
 WATCHPORT_RP_ID=desktop.example-tailnet.ts.net
-WATCHPORT_STREAM_ORIGIN=https://desktop.example-tailnet.ts.net
+WATCHPORT_STREAM_ORIGIN=https://desktop.example-tailnet.ts.net:9443
 WATCHPORT_INDICATOR_SECRET=<strong random value>
 ```
 
@@ -98,10 +104,10 @@ watchport
 
 Then privately publish it with Tailscale Serve. Current Tailscale CLI supports HTTPS serving of a local target; the exact command should be checked on the installed Tailscale version with `tailscale serve --help` before applying it.
 
-A representative configuration is:
+With `WATCHPORT_PORT=8787` (the Mac config generator default), a representative configuration is:
 
 ```bash
-tailscale serve --bg --https=8443 8443
+tailscale serve --bg --https=8443 http://127.0.0.1:8787
 ```
 
 This is **Serve**, not Funnel. Funnel is out of scope because it deliberately makes a service reachable from the public internet.
@@ -110,7 +116,7 @@ This is **Serve**, not Funnel. Funnel is out of scope because it deliberately ma
 
 Use a dedicated destination tag or host selector for the desktop and grant only the devices/users that should be able to reach Watchport/Moonlight.
 
-Current Tailscale Grants support protocol/port-specific permissions such as `tcp:443`, `tcp:8443`, and `udp:<port>`. During live integration, narrow this to the actual Moonlight-Web/WebRTC ports verified on the host. Do not grant `*` merely for convenience.
+Current Tailscale Grants support protocol/port-specific permissions such as `tcp:8443`, `tcp:9443`, and `udp:<port>`. During live integration, narrow this to the actual Moonlight-Web/WebRTC ports verified on the host. Do not grant `*` merely for convenience.
 
 The desired end state is conceptually:
 
@@ -120,7 +126,7 @@ The desired end state is conceptually:
     {
       "src": ["<your user/group/device selector>"],
       "dst": ["<Watchport desktop selector>"],
-      "ip": ["tcp:443", "tcp:8443", "udp:<verified-webrtc-port>"]
+      "ip": ["tcp:8443", "tcp:9443", "udp:<verified-webrtc-port>"]
     }
   ]
 }
@@ -186,6 +192,8 @@ Restart Watchport and the indicator after changing configuration.
 ## 10. Publish the Moonlight player path to the tailnet only
 
 This is intentionally a live-integration step rather than a guessed static recipe. Moonlight-Web signaling and WebRTC media behavior must be observed on the actual version/platform.
+
+**Do not proxy the complete Moonlight localhost management server.** Its peer-based local trust can expose owner operations. Implement and test the boundary in [PLAYER-INGRESS.md](PLAYER-INGRESS.md).
 
 Requirements:
 

@@ -1,27 +1,15 @@
-# Stream adapter completion contract
+# Stream adapter contract and remaining validation
 
-The next implementation slice must replace the static `WATCHPORT_VIEWER_URL` handoff with a real adapter that owns the lifecycle of a backend-enforced Moonlight-Web Viewer capability.
+The former static Viewer URL handoff has been replaced by `MoonlightWebAdapter.open`, `close`, `cleanup_stale_slots`, `revoke_all`, `probe` and `apps_for`. Watchport owns only configured player slots 2–4. `StreamGrant` contains the scoped player cookie and viewer URL; owner credentials stay local.
 
-Required interface:
+Implemented contract:
 
-```python
-class StreamAdapter:
-    def create_viewer(self, session_id: str) -> ViewerCapability: ...
-    def revoke_viewer(self, session_id: str) -> None: ...
-    def is_active(self, session_id: str) -> bool: ...
-```
+- Viewer input flags must be false before a capability is released.
+- Internet Access must be explicitly disabled; a local link is an additional check.
+- Admission requires a fresh GUI acknowledgment before minting and rechecks authorization afterwards.
+- Revocation requires the requested slot to be reported `off`; any failed slot blocks admission and remains tracked as uncertain.
+- Gateway and indicator use a bounded cross-process lock for owner/PIN operations. Host kill, watchdog and startup cleanup cover uncertain capabilities.
 
-`ViewerCapability` must be view-only below the browser UI layer and must contain only the minimum material required by the browser to connect.
+Remaining live proof: physical video teardown and old-cookie rejection after every failure, strict intended-host/app verification, private player ingress, and simultaneous-process/logout handling. A successful upstream response is not evidence that the remote display stopped.
 
-Required behavior:
-
-- create only Viewer permissions; never Gamer or Full Control;
-- no clipboard/input/file/shell authority;
-- revoke when Watchport session expires;
-- revoke when the user closes the view;
-- revoke when indicator heartbeat becomes unhealthy beyond the grace period;
-- revoke stale capabilities on gateway startup where possible;
-- never enable Moonlight-Web Internet Access/UPnP/public ingress;
-- keep Moonlight-Web/Sunshine as separately installed GPL dependencies.
-
-Acceptance test: kill the indicator process while a real remote browser is viewing. The video must stop without requiring action in the browser and without leaving a reusable Viewer capability behind.
+See [UPSTREAM-CONTRACT.md](research/UPSTREAM-CONTRACT.md), [PLAYER-INGRESS.md](PLAYER-INGRESS.md) and [MAC-AGENT-HANDOFF.md](MAC-AGENT-HANDOFF.md).
